@@ -286,18 +286,29 @@ class ASIO_Stream_Tests final : public Test
          {
          auto s = setupTestSyncRead(ssl.channel(), socket);
 
-         char buf[socket.buf_size / 2];
+         char buf[48];
          boost::system::error_code ec;
-         auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
-         result.test_eq("stream consumes some data", bytes_read, socket.buf_size / 2);
-         result.test_eq("data read from socket", s->socket_read_count, 3);
-         result.test_is_eq("first part of data is read correctly", memcmp(buf, TEST_DATA, sizeof(buf)), 0);
+         size_t total_bytes_read = 0;
 
-         bytes_read += ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
-         result.test_eq("stream consumes some more data", bytes_read, socket.buf_size);
+         auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         total_bytes_read += bytes_read;
+         result.test_eq("stream consumes some data", total_bytes_read, sizeof(buf));
+         result.test_eq("data read from socket", s->socket_read_count, 3);
+         result.test_is_eq("first part of data is read correctly", memcmp(buf, TEST_DATA, bytes_read), 0);
+
+         bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         total_bytes_read += bytes_read;
+         result.test_eq("stream consumes some more data", total_bytes_read, 2 * sizeof(buf));
          result.test_eq("no further data read from socket", s->socket_read_count, 3);
          result.test_is_eq("second part of data is read correctly",
-                           memcmp(buf, TEST_DATA + socket.buf_size / 2, sizeof(buf)), 0);
+                           memcmp(buf, TEST_DATA + sizeof(buf), bytes_read), 0);
+
+         bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         total_bytes_read += bytes_read;
+         result.test_eq("stream consumes final data", total_bytes_read, socket.buf_size);
+         result.test_eq("still no further data read from socket", s->socket_read_count, 3);
+         result.test_is_eq("last part of data is read correctly",
+                           memcmp(buf, TEST_DATA + 2 * sizeof(buf), bytes_read), 0);
          }
 
       Test::Result test_write_some()
