@@ -11,6 +11,16 @@
 
 namespace Botan_Tests {
 
+const uint8_t TEST_DATA[] {'4','f','8','y','z','s','9','g','2','6','c','v','t','y','q','m',
+                           'o','v','x','a','3','1','t','m','y','7','n','1','4','t','k','q',
+                           'r','z','w','0','4','t','c','t','m','u','4','h','l','z','x','f',
+                           'e','9','b','3','o','j','a','4','o','d','9','j','6','u','f','8',
+                           '2','d','r','z','n','l','p','7','p','a','1','o','f','z','q','d',
+                           'x','f','k','8','r','l','a','i','0','b','x','h','2','w','5','w',
+                           'h','k','h','2','r','8','a','f','d','j','c','0','j','o','k','w',
+                           'v','4','9','m','s','a','o','f','0','n','u','l','v','z','g','m'
+                          };
+
 #if defined(BOTAN_HAS_TLS)
 
 struct TestState
@@ -25,114 +35,119 @@ struct TestState
 class MockChannel
    {
    public:
-      MockChannel(Botan::TLS::Callbacks& callbacks) : callbacks_(callbacks) {}
+      MockChannel(Botan::detail::StreamCore& core) : core_(core) {}
 
    public:
       // mockable channel functions
       //
       std::size_t received_data(const uint8_t buf[], std::size_t buf_size)
          {
+         current_test_state_->channel_recv_count++;
          return received_data_fun(buf, buf_size);
          }
       std::function<size_t(const uint8_t buf[], std::size_t buf_size)>
       received_data_fun =
-      [](const uint8_t buf[], std::size_t buf_size) { return 0; };
+         [](const uint8_t buf[], std::size_t buf_size)
+         {
+         return buf_size;
+         };
 
       void send(const uint8_t buf[], std::size_t buf_size)
          {
+         current_test_state_->channel_send_count++;
          send_data_fun(buf, buf_size);
          }
       std::function<void(const uint8_t buf[], std::size_t buf_size)>
       send_data_fun = [](const uint8_t buf[], std::size_t buf_size) {};
 
-      bool is_active() { return is_active_fun(); }
+      bool is_active()
+         {
+         return is_active_fun();
+         }
       std::function<bool()> is_active_fun = [] { return false; };
 
+      void set_current_test_state(std::shared_ptr<TestState>& test_state)
+         {
+         current_test_state_ = test_state;
+         }
    public:
       // functions forwarding to callbacks to be triggered from the outside
       //
       void tls_emit_data(const uint8_t buf[], std::size_t buf_size)
          {
-         callbacks_.tls_emit_data(buf, buf_size);
+         core_.tls_emit_data(buf, buf_size);
          }
       void tls_record_received(uint64_t seq_no, const uint8_t buf[],
                                std::size_t buf_size)
          {
-         callbacks_.tls_record_received(seq_no, buf, buf_size);
+         core_.tls_record_received(seq_no, buf, buf_size);
          }
 
    protected:
-      Botan::TLS::Callbacks& callbacks_;
+      Botan::detail::StreamCore& core_;
+      std::shared_ptr<TestState> current_test_state_;
    };
 
 struct MockSocket
    {
-   const std::size_t buf_size = 128;
+      const std::size_t buf_size = 128;
 
-   template <typename ConstBufferSequence>
-   std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
-      {
-      return write_some_fun(buffers, ec);
-      }
-
-   std::function<std::size_t(const boost::asio::const_buffer& buffers,
-                             boost::system::error_code& ec)>
-   write_some_fun = [](const boost::asio::const_buffer& buffers,
-   boost::system::error_code& ec) { return 0; };
-
-   template <typename MutableBufferSequence>
-   std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
-      {
-      return read_some_fun(buffers, ec);
-      }
-
-   std::function<std::size_t(const boost::asio::mutable_buffer& buffers,
-                             boost::system::error_code& ec)>
-   read_some_fun = [](const boost::asio::mutable_buffer& buffers,
-   boost::system::error_code& ec) { return 0; };
-
-   void set_default_read_some_fun(std::shared_ptr<TestState> s)
-      {
-      read_some_fun = [=](const boost::asio::mutable_buffer& buffers, boost::system::error_code& ec)
+      template <typename ConstBufferSequence>
+      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
          {
-         s->socket_read_count += 1;
+         current_test_state_->socket_write_count++;
+         return write_some_fun(buffers, ec);
+         }
+
+      std::function<std::size_t(const boost::asio::const_buffer& buffers,
+                                boost::system::error_code& ec)>
+      write_some_fun = [this](const boost::asio::const_buffer& buffers,
+                              boost::system::error_code& ec)
+         {
          return buf_size;
          };
-      }
 
-   void set_default_write_some_fun(std::shared_ptr<TestState> s)
-      {
-      write_some_fun = [=](const boost::asio::const_buffer& buffers, boost::system::error_code& ec)
+      template <typename MutableBufferSequence>
+      std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
          {
-         s->socket_write_count += 1;
+         current_test_state_->socket_read_count++;
+         boost::asio::buffer_copy(buffers, boost::asio::buffer(TEST_DATA, buf_size));
+         return read_some_fun(buffers, ec);
+         }
+
+      std::function<std::size_t(const boost::asio::mutable_buffer& buffers,
+                                boost::system::error_code& ec)>
+      read_some_fun = [this](const boost::asio::mutable_buffer& buffers,
+                             boost::system::error_code& ec)
+         {
          return buf_size;
          };
-      }
 
-   using lowest_layer_type = MockSocket;
-   using executor_type = MockSocket;
+      void set_current_test_state(std::shared_ptr<TestState>& test_state)
+         {
+         current_test_state_ = test_state;
+         }
+
+      using lowest_layer_type = MockSocket;
+      using executor_type = MockSocket;
+
+   private:
+      std::shared_ptr<TestState> current_test_state_;
    };
 
 static std::shared_ptr<TestState> setupTestHandshake(MockChannel& channel,
       MockSocket& socket)
    {
-   auto s = std::shared_ptr<TestState>(new TestState());
+   auto s = std::make_shared<TestState>();
+   channel.set_current_test_state(s);
+   socket.set_current_test_state(s);
 
    // fake handshake initialization
    uint8_t buf[128];
    channel.tls_emit_data(buf, sizeof(buf));
    // the channel will claim to be active once it has been given 3 chunks
    // of data
-   channel.is_active_fun = [&s] { return s->channel_recv_count == 3; };
-   channel.received_data_fun = [&s](const uint8_t buf[],
-                                    std::size_t buf_size)
-      {
-      s->channel_recv_count++;
-      return 0;
-      };
-
-   socket.set_default_read_some_fun(s);
-   socket.set_default_write_some_fun(s);
+   channel.is_active_fun = [s] { return s->channel_recv_count == 3; };
 
    return s;
    }
@@ -141,19 +156,17 @@ static std::shared_ptr<TestState> setupTestSyncRead(MockChannel& channel,
       MockSocket& socket)
    {
    auto s = std::make_shared<TestState>();
+   channel.set_current_test_state(s);
+   socket.set_current_test_state(s);
 
    channel.received_data_fun = [s, &channel](const uint8_t buf[], std::size_t buf_size)
       {
-      s->channel_recv_count++;
       if(s->channel_recv_count >= 3)
          {
          channel.tls_record_received(0, buf, buf_size);
          }
-      return 0;
+      return buf_size;
       };
-
-   socket.set_default_read_some_fun(s);
-   socket.set_default_write_some_fun(s);
 
    return s;
    }
@@ -162,16 +175,14 @@ static std::shared_ptr<TestState> setupTestSyncWrite(MockChannel& channel,
       MockSocket& socket)
    {
    auto s = std::make_shared<TestState>();
+   channel.set_current_test_state(s);
+   socket.set_current_test_state(s);
 
    channel.send_data_fun = [s, &channel](const uint8_t buf[],
                                          std::size_t buf_size)
       {
-      s->channel_send_count++;
       channel.tls_emit_data(buf, buf_size);
       };
-
-   socket.set_default_read_some_fun(s);
-   socket.set_default_write_some_fun(s);
 
    return s;
    }
@@ -247,6 +258,7 @@ class ASIO_Stream_Tests final : public Test
          auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
 
          result.test_eq("some data is read", s->socket_read_count, 3);
+         result.test_is_eq("correct data is read", memcmp(buf, TEST_DATA, sizeof(buf)), 0);
          }
 
       void test_read_some_error(Test::Result& result, TestStream& ssl, MockSocket& socket)
@@ -279,10 +291,13 @@ class ASIO_Stream_Tests final : public Test
          auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
          result.test_eq("stream consumes some data", bytes_read, socket.buf_size / 2);
          result.test_eq("data read from socket", s->socket_read_count, 3);
+         result.test_is_eq("first part of data is read correctly", memcmp(buf, TEST_DATA, sizeof(buf)), 0);
 
          bytes_read += ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
          result.test_eq("stream consumes some more data", bytes_read, socket.buf_size);
          result.test_eq("no further data read from socket", s->socket_read_count, 3);
+         result.test_is_eq("second part of data is read correctly",
+                           memcmp(buf, TEST_DATA + socket.buf_size / 2, sizeof(buf)), 0);
          }
 
       Test::Result test_write_some()
