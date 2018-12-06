@@ -11,15 +11,21 @@
 
 namespace Botan_Tests {
 
-const uint8_t TEST_DATA[] {'4','f','8','y','z','s','9','g','2','6','c','v','t','y','q','m',
-                           'o','v','x','a','3','1','t','m','y','7','n','1','4','t','k','q',
-                           'r','z','w','0','4','t','c','t','m','u','4','h','l','z','x','f',
-                           'e','9','b','3','o','j','a','4','o','d','9','j','6','u','f','8',
-                           '2','d','r','z','n','l','p','7','p','a','1','o','f','z','q','d',
-                           'x','f','k','8','r','l','a','i','0','b','x','h','2','w','5','w',
-                           'h','k','h','2','r','8','a','f','d','j','c','0','j','o','k','w',
-                           'v','4','9','m','s','a','o','f','0','n','u','l','v','z','g','m'
-                          };
+template <typename T, size_t N>
+inline constexpr std::size_t ARR_LEN(const T(&arr) [N]) { return N; }
+
+constexpr uint8_t TEST_DATA[]
+   {
+   '4','f','8','y','z','s','9','g','2','6','c','v','t','y','q','m',
+   'o','v','x','a','3','1','t','m','y','7','n','1','4','t','k','q',
+   'r','z','w','0','4','t','c','t','m','u','4','h','l','z','x','f',
+   'e','9','b','3','o','j','a','4','o','d','9','j','6','u','f','8',
+   '2','d','r','z','n','l','p','7','p','a','1','o','f','z','q','d',
+   'x','f','k','8','r','l','a','i','0','b','x','h','2','w','5','w',
+   'h','k','h','2','r','8','a','f','d','j','c','0','j','o','k','w',
+   'v','4','9','m','s','a','o','f','0','n','u','l','v','z','g','m'
+   };
+constexpr std::size_t TEST_DATA_SIZE = ARR_LEN(TEST_DATA);
 
 #if defined(BOTAN_HAS_TLS)
 
@@ -90,22 +96,16 @@ class MockChannel
 
 struct MockSocket
    {
-      const std::size_t buf_size = 128;
+      static const std::size_t buf_size = 128;
+      char socket_buf[buf_size];
 
       template <typename ConstBufferSequence>
       std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
          {
          current_test_state_->socket_write_count++;
-         return write_some_fun(buffers, ec);
+         boost::asio::buffer_copy(boost::asio::buffer(socket_buf, buf_size), buffers);
+         return std::min(buf_size, boost::asio::buffer_size(buffers));
          }
-
-      std::function<std::size_t(const boost::asio::const_buffer& buffers,
-                                boost::system::error_code& ec)>
-      write_some_fun = [this](const boost::asio::const_buffer& buffers,
-                              boost::system::error_code& ec)
-         {
-         return buf_size;
-         };
 
       template <typename MutableBufferSequence>
       std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
@@ -321,6 +321,7 @@ class ASIO_Stream_Tests final : public Test
          test_write_some_basic_case(result, ssl, socket);
          test_write_some_big_data(result, ssl, socket);
          test_write_some_write_nothing(result, ssl, socket);
+         test_write_some_writes_data_in_chunks(result, ssl, socket);
 
          return result;
          }
@@ -367,6 +368,42 @@ class ASIO_Stream_Tests final : public Test
 
          result.test_eq("no data is written", s->socket_write_count, 0);
          result.test_eq("channel calls send nonetheless", s->channel_send_count, 1);
+         }
+
+      void test_write_some_writes_data_in_chunks(Test::Result& result, TestStream& ssl, MockSocket& socket)
+         {
+         auto s = setupTestSyncWrite(ssl.channel(), socket);
+
+         const std::size_t in_buf_size = 48;
+         boost::system::error_code ec;
+         size_t total_bytes_written = 0;
+
+         auto write_next = [&]
+            {
+            const std::size_t write = std::min(in_buf_size, TEST_DATA_SIZE - total_bytes_written);
+            return ssl.write_some(boost::asio::buffer(TEST_DATA + total_bytes_written, write), ec);
+            };
+
+         auto bytes_written = write_next();
+         total_bytes_written += bytes_written;
+         result.test_eq("stream consumes some data", total_bytes_written, in_buf_size);
+         result.test_eq("data written to socket", s->socket_write_count, 1);
+         result.test_is_eq("first part of data is written correctly",
+                           memcmp(socket.socket_buf, TEST_DATA, bytes_written), 0);
+
+         bytes_written = write_next();
+         total_bytes_written += bytes_written;
+         result.test_eq("stream consumes some more data", total_bytes_written, 2 * in_buf_size);
+         result.test_eq("no further data written to socket", s->socket_write_count, 2);
+         result.test_is_eq("second part of data is written correctly",
+                           memcmp(socket.socket_buf, TEST_DATA + in_buf_size, bytes_written), 0);
+
+         bytes_written = write_next();
+         total_bytes_written += bytes_written;
+         result.test_eq("stream consumes final data", total_bytes_written, TEST_DATA_SIZE);
+         result.test_eq("still no further data written to socket", s->socket_write_count, 3);
+         result.test_is_eq("last part of data is written correctly",
+                           memcmp(socket.socket_buf, TEST_DATA + 2 * in_buf_size, bytes_written), 0);
          }
 
    public:
