@@ -8,12 +8,13 @@
 namespace Botan {
 namespace detail {
 
-template <typename StreamLayer, typename Handler,
-          typename MutableBufferSequence>
+template <class Channel, class StreamLayer, class Handler, class MutableBufferSequence>
 struct AsyncReadOperation
    {
-      AsyncReadOperation(Botan::TLS::Channel& channel, StreamCore& core,
-                         StreamLayer& nextLayer, Handler&& handler,
+      AsyncReadOperation(Channel& channel,
+                         StreamCore& core,
+                         StreamLayer& nextLayer,
+                         Handler&& handler,
                          const MutableBufferSequence& buffers)
          : channel_(channel),
            core_(core),
@@ -33,55 +34,49 @@ struct AsyncReadOperation
 
       void operator()(boost::system::error_code ec,
                       std::size_t bytes_transferred = ~std::size_t(0),
-                      int start = 0)
+                      bool first_call = false)
          {
          std::size_t decodedBytes = 0;
-            {
-            if(bytes_transferred > 0)
-               {
-               auto read_buffer =
-                  boost::asio::buffer(core_.input_buffer_, bytes_transferred);
-               try
-                  {
-                  channel_.received_data(
-                     static_cast<const uint8_t*>(read_buffer.data()),
-                     read_buffer.size());
-                  }
-               catch(...)
-                  {
-                  ec = detail::convertException();
-                  handler_(ec, 0);
-                  return;
-                  }
-               }
-            if(!core_.hasReceivedData() && !ec)
-               {
-               // we need more tls packets from the socket
-               nextLayer_.async_read_some(core_.input_buffer_,
-                                          std::move(*this));
-               return;
-               }
 
-            if(core_.hasReceivedData())
-               {
-               if(start == 1)
-                  {
-                  // don't call the handler directly, similar to
-                  // io_context.post
-                  nextLayer_.async_read_some(
-                     boost::asio::buffer(core_.input_buffer_, 0),
-                     std::move(*this));
-                  return;
-                  }
-               decodedBytes = core_.copyReceivedData(buffers_);
-               ec = boost::system::error_code{};
-               }
+         if(bytes_transferred > 0)
+         {
+            auto read_buffer = boost::asio::buffer(core_.input_buffer_, bytes_transferred);
+            try
+            {
+               channel_.received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
             }
+            catch(...)
+            {
+               ec = detail::convertException();
+               handler_(ec, 0);
+               return;
+            }
+         }
+
+         if(!core_.hasReceivedData() && !ec)
+         {
+            // we need more tls packets from the socket
+            nextLayer_.async_read_some(core_.input_buffer_, std::move(*this));
+            return;
+         }
+
+         if(core_.hasReceivedData())
+         {
+            if(first_call)
+            {
+               // don't call the handler directly, similar to io_context.post
+               nextLayer_.async_read_some(boost::asio::buffer(core_.input_buffer_, 0), std::move(*this));
+               return;
+            }
+            decodedBytes = core_.copyReceivedData(buffers_);
+            ec = boost::system::error_code{};
+         }
+
          handler_(ec, decodedBytes);
          }
 
    private:
-      Botan::TLS::Channel& channel_;
+      Channel& channel_;
       StreamCore& core_;
       StreamLayer& nextLayer_;
       Handler handler_;

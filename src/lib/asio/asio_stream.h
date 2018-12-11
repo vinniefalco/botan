@@ -112,15 +112,16 @@ class Stream : public StreamBase<Channel>
                {
                writePendingTlsData(ec);
                if(ec)
+                  {
                   return;
-               auto read_buffer = boost::asio::buffer(
-                                     this->core_.input_buffer_,
-                                     nextLayer_.read_some(this->core_.input_buffer_, ec));
+                  }
+               auto read_buffer =
+                  boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
                if(ec)
+                  {
                   return;
-               channel().received_data(
-                  static_cast<const uint8_t*>(read_buffer.data()),
-                  read_buffer.size());
+                  }
+               channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
                writePendingTlsData(ec);
                }
             catch(...)
@@ -132,19 +133,14 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename HandshakeHandler>
-      BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler,
-                                    void(boost::system::error_code))
+      BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler, void(boost::system::error_code))
       async_handshake(HandshakeHandler&& handler)
          {
-         // If you get an error on the following line it means that your handler
-         // does not meet the documented type requirements for a
-         // HandshakeHandler.
-         BOOST_ASIO_HANDSHAKE_HANDLER_CHECK(HandshakeHandler, handler)
-         type_check;
+         // If you get an error on the following line it means that your handler does not meet the documented type
+         // requirements for a HandshakeHandler.
+         BOOST_ASIO_HANDSHAKE_HANDLER_CHECK(HandshakeHandler, handler) type_check;
 
-         boost::asio::async_completion<HandshakeHandler,
-               void(boost::system::error_code)>
-               init(handler);
+         boost::asio::async_completion<HandshakeHandler, void(boost::system::error_code)> init(handler);
 
          auto op = create_async_handshake_op(std::move(init.completion_handler));
          op(boost::system::error_code{}, 0, 1);
@@ -183,21 +179,19 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename MutableBufferSequence>
-      std::size_t read_some(const MutableBufferSequence& buffers,
-                            boost::system::error_code&   ec)
+      std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
          {
          while(!this->core_.hasReceivedData())
             {
-            auto read_buffer = boost::asio::buffer(
-                                  this->core_.input_buffer_,
-                                  nextLayer_.read_some(this->core_.input_buffer_, ec));
+            auto read_buffer =
+               boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
             if(ec)
+               {
                return 0;
+               }
             try
                {
-               channel().received_data(
-                  static_cast<const uint8_t*>(read_buffer.data()),
-                  read_buffer.size());
+               channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
                }
             catch(...)
                {
@@ -220,8 +214,7 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename ConstBufferSequence>
-      std::size_t write_some(const ConstBufferSequence& buffers,
-                             boost::system::error_code& ec)
+      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
          {
          boost::asio::const_buffer buffer =
             boost::asio::detail::buffer_sequence_adapter<
@@ -229,8 +222,7 @@ class Stream : public StreamBase<Channel>
 
          try
             {
-            channel().send(static_cast<const uint8_t*>(buffer.data()),
-                           buffer.size());
+            channel().send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
             }
          catch(...)
             {
@@ -243,8 +235,7 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename ConstBufferSequence, typename WriteHandler>
-      BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
-                                    void(boost::system::error_code, std::size_t))
+      BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler, void(boost::system::error_code, std::size_t))
       async_write_some(const ConstBufferSequence& buffers, WriteHandler&& handler)
          {
          // If you get an error on the following line it means that your handler
@@ -257,8 +248,7 @@ class Stream : public StreamBase<Channel>
 
          try
             {
-            channel().send(static_cast<const uint8_t*>(buffer.data()),
-                           buffer.size());
+            channel().send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
             }
          catch(...)
             {
@@ -267,41 +257,32 @@ class Stream : public StreamBase<Channel>
             return;
             }
 
-         boost::asio::async_completion<
-         WriteHandler, void(boost::system::error_code, std::size_t)>
-         init(handler);
-         auto op = create_async_write_op(std::move(init.completion_handler),
-                                         buffer.size());
+         boost::asio::async_completion<WriteHandler, void(boost::system::error_code, std::size_t)> init(handler);
+         auto op = create_async_write_op(std::move(init.completion_handler), buffer.size());
 
-         boost::asio::async_write(nextLayer_, this->core_.sendBuffer(),
-                                  std::move(op));
+         boost::asio::async_write(nextLayer_, this->core_.sendBuffer(), std::move(op));
          return init.result.get();
          }
 
       template <typename MutableBufferSequence, typename ReadHandler>
-      BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
-                                    void(boost::system::error_code, std::size_t))
+      BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler, void(boost::system::error_code, std::size_t))
       async_read_some(const MutableBufferSequence& buffers, ReadHandler&& handler)
          {
          // If you get an error on the following line it means that your handler
          // does not meet the documented type requirements for a ReadHandler.
          BOOST_ASIO_READ_HANDLER_CHECK(ReadHandler, handler) type_check;
 
-         boost::asio::async_completion<
-         ReadHandler, void(boost::system::error_code, std::size_t)>
-         init(handler);
+         boost::asio::async_completion<ReadHandler, void(boost::system::error_code, std::size_t)> init(handler);
 
-         auto op =
-            create_async_read_op(std::move(init.completion_handler), buffers);
-         op(boost::system::error_code{}, 0, 1);
+         auto op = create_async_read_op(std::move(init.completion_handler), buffers);
+         op(boost::system::error_code{}, 0, /* first_call */ true);
          return init.result.get();
          }
 
    protected:
       size_t writePendingTlsData(boost::system::error_code& ec)
          {
-         auto writtenBytes =
-            boost::asio::write(nextLayer_, this->core_.sendBuffer(), ec);
+         auto writtenBytes = boost::asio::write(nextLayer_, this->core_.sendBuffer(), ec);
          this->core_.consumeSendBuffer(writtenBytes);
          return writtenBytes;
          }
@@ -315,14 +296,11 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename Handler, typename MutableBufferSequence>
-      detail::AsyncReadOperation<StreamLayer, Handler, MutableBufferSequence>
-      create_async_read_op(Handler&&                    handler,
-                           const MutableBufferSequence& buffers)
+      detail::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>
+      create_async_read_op(Handler&& handler, const MutableBufferSequence& buffers)
          {
-         return detail::AsyncReadOperation<StreamLayer, Handler,
-                MutableBufferSequence>(
-                   channel(), this->core_, nextLayer_, std::forward<Handler>(handler),
-                   buffers);
+         return detail::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>(
+                   channel(), this->core_, nextLayer_, std::forward<Handler>(handler), buffers);
          }
 
       template <typename Handler>

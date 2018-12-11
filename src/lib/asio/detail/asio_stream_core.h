@@ -15,9 +15,7 @@ struct StreamCore : public Botan::TLS::Callbacks
          {
          Buffer() : dynamicBuffer(data_buffer) {}
          std::vector<uint8_t> data_buffer;
-         boost::asio::dynamic_vector_buffer<
-         uint8_t, typename decltype(data_buffer)::allocator_type>
-         dynamicBuffer;
+         boost::asio::dynamic_vector_buffer<uint8_t, typename decltype(data_buffer)::allocator_type> dynamicBuffer;
          };
 
       StreamCore()
@@ -29,17 +27,14 @@ struct StreamCore : public Botan::TLS::Callbacks
       void tls_emit_data(const uint8_t data[], size_t size) override
          {
          auto buffer = send_buffer_.dynamicBuffer.prepare(size);
-         auto copySize =
-            boost::asio::buffer_copy(buffer, boost::asio::buffer(data, size));
+         auto copySize = boost::asio::buffer_copy(buffer, boost::asio::buffer(data, size));
          send_buffer_.dynamicBuffer.commit(copySize);
          }
 
-      void tls_record_received(uint64_t seq_no, const uint8_t data[],
-                               size_t size) override
+      void tls_record_received(uint64_t seq_no, const uint8_t data[], size_t size) override
          {
          auto buffer = receive_buffer_.dynamicBuffer.prepare(size);
-         auto copySize =
-            boost::asio::buffer_copy(buffer, boost::asio::buffer(data, size));
+         auto copySize = boost::asio::buffer_copy(buffer, boost::asio::buffer(data, size));
          receive_buffer_.dynamicBuffer.commit(copySize);
          }
 
@@ -47,6 +42,7 @@ struct StreamCore : public Botan::TLS::Callbacks
          {
          if(alert.type() == Botan::TLS::Alert::CLOSE_NOTIFY)
             {
+               // TODO
             }
          }
 
@@ -63,8 +59,7 @@ struct StreamCore : public Botan::TLS::Callbacks
       template <typename MutableBufferSequence>
       std::size_t copyReceivedData(MutableBufferSequence buffers)
          {
-         auto copiedBytes = boost::asio::buffer_copy(
-                               buffers, receive_buffer_.dynamicBuffer.data());
+         auto copiedBytes = boost::asio::buffer_copy(buffers, receive_buffer_.dynamicBuffer.data());
          receive_buffer_.dynamicBuffer.consume(copiedBytes);
          return copiedBytes;
          }
