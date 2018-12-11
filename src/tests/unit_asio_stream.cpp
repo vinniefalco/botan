@@ -38,10 +38,45 @@ struct TestState
    std::size_t socket_write_count = 0;
    };
 
-class MockChannel
+/**
+ * Helper class to make it easier for the MockChannel to derive from Botan::TLS::Channel. This class default-constructs
+ * all parameters required for the Botan::TLS::Channel constructor and overrides it's abstract functions to do nothing.
+ */
+class NoopChannel : public Botan::TLS::Channel
    {
    public:
-      MockChannel(Botan::detail::StreamCore& core) : core_(core) {}
+      NoopChannel(Botan::TLS::Callbacks& callbacks)
+         : Botan::TLS::Channel(callbacks, session_, rng_, policy_, false),
+           callbacks_(callbacks) {}
+
+   private:
+      virtual void process_handshake_msg(const Botan::TLS::Handshake_State*,
+                                         Botan::TLS::Handshake_State&,
+                                         Botan::TLS::Handshake_Type,
+                                         const std::vector<uint8_t>&) override {}
+
+      virtual void initiate_handshake(Botan::TLS::Handshake_State&, bool) override {}
+
+      virtual std::vector<Botan::X509_Certificate> get_peer_cert_chain(const Botan::TLS::Handshake_State&) const override
+         {
+         return {};
+         }
+
+      virtual Botan::TLS::Handshake_State* new_handshake_state(class Botan::TLS::Handshake_IO* io) override
+         {
+         return &create_handshake_state(Botan::TLS::Protocol_Version::TLS_V12);
+         }
+
+      Botan::TLS::Session_Manager_Noop session_;
+      Botan::Null_RNG rng_;
+      Botan::TLS::Policy policy_;
+      Botan::TLS::Callbacks& callbacks_;
+   };
+
+class MockChannel : public NoopChannel
+   {
+   public:
+      MockChannel(Botan::detail::StreamCore& core) : NoopChannel(core), core_(core) {}
 
    public:
       // mockable channel functions
