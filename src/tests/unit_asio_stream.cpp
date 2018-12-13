@@ -11,6 +11,10 @@
 
 namespace Botan_Tests {
 
+#if defined(BOTAN_HAS_TLS)
+
+using namespace std::placeholders;
+
 template <typename T, size_t N>
 inline constexpr std::size_t ARR_LEN(const T(&arr) [N]) { return N; }
 
@@ -27,7 +31,7 @@ constexpr uint8_t TEST_DATA[]
    };
 constexpr std::size_t TEST_DATA_SIZE = ARR_LEN(TEST_DATA);
 
-#if defined(BOTAN_HAS_TLS)
+constexpr std::size_t SOCKET_BUF_SIZE = 128;
 
 struct TestState
    {
@@ -36,7 +40,38 @@ struct TestState
 
    std::size_t socket_read_count = 0;
    std::size_t socket_write_count = 0;
+
+   std::size_t bytes_read = 0;
+   std::size_t bytes_written = 0;
+
+   boost::asio::mutable_buffer socket_buf = boost::asio::buffer(data_, SOCKET_BUF_SIZE);
+   uint8_t data_[SOCKET_BUF_SIZE];
+
+   void check_has_read_test_data(
+      char* input_buf, std::size_t expected_bytes_read, int expected_socket_read_count, std::size_t start,
+      const boost::system::error_code& ec, std::size_t bytes_transferred)
+      {
+      bytes_read += bytes_transferred;
+      result->test_eq("stream consumes correct number of bytes", bytes_read, expected_bytes_read);
+      result->test_eq("correct number of read calls on socket", socket_read_count, expected_socket_read_count);
+      result->test_is_eq("correct data is written into the buffer",
+                         memcmp(input_buf, TEST_DATA + start, bytes_transferred), 0);
+      }
+
+   void check_has_written_test_data(
+      std::size_t expected_bytes_written, int expected_socket_write_count, std::size_t start,
+      const boost::system::error_code& ec, std::size_t bytes_transferred)
+      {
+      bytes_written += bytes_transferred;
+      result->test_eq("stream commits correct number of bytes", bytes_written, expected_bytes_written);
+      result->test_eq("data written to socket", socket_write_count, expected_socket_write_count);
+      result->test_is_eq("first part of data is written correctly",
+                        memcmp(socket_buf.data(), TEST_DATA + start, bytes_transferred), 0);
+      }
+
+   Test::Result *result;
    };
+
 
 class MockChannel
    {
@@ -93,25 +128,22 @@ class MockChannel
       std::shared_ptr<TestState> current_test_state_;
    };
 
-const std::size_t socket_buf_size = 128;
-
 struct MockSocket
    {
-      char socket_buf[socket_buf_size];
-
       template <typename ConstBufferSequence>
-      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
+      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code&)
          {
-         current_test_state_->socket_write_count++;
-         boost::asio::buffer_copy(boost::asio::buffer(socket_buf, socket_buf_size), buffers);
-         return std::min(socket_buf_size, boost::asio::buffer_size(buffers));
+         test_state_->socket_write_count++;
+         const auto to_write = std::min(boost::asio::buffer_size(buffers), SOCKET_BUF_SIZE);
+         auto copied = boost::asio::buffer_copy(test_state_->socket_buf, buffers, to_write);
+         return copied;
          }
 
       template <typename MutableBufferSequence>
       std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
          {
-         current_test_state_->socket_read_count++;
-         boost::asio::buffer_copy(buffers, boost::asio::buffer(TEST_DATA, socket_buf_size));
+         test_state_->socket_read_count++;
+         auto read = boost::asio::buffer_copy(buffers, test_state_->socket_buf);
          return read_some_fun(buffers, ec);
          }
 
@@ -123,31 +155,37 @@ struct MockSocket
          handler(ec, read_some(buffers, ec));
          }
 
-      std::function<std::size_t(const boost::asio::mutable_buffer& buffers,
-                                boost::system::error_code& ec)>
-      read_some_fun = [this](const boost::asio::mutable_buffer& buffers,
-                             boost::system::error_code& ec)
+      template <typename ConstBufferSequence, typename WriteHandler>
+      BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler, void(boost::system::error_code, std::size_t))
+      async_write_some(const ConstBufferSequence& buffers, WriteHandler&& handler)
          {
-         return socket_buf_size;
+         boost::system::error_code ec;
+         handler(ec, write_some(buffers, ec));
+         }
+
+      std::function<std::size_t(const boost::asio::mutable_buffer&, boost::system::error_code&)>
+      read_some_fun = [this](const boost::asio::mutable_buffer&, boost::system::error_code&)
+         {
+         return SOCKET_BUF_SIZE;
          };
 
-      void set_current_test_state(std::shared_ptr<TestState>& test_state)
+      void reset(std::shared_ptr<TestState>& test_state)
          {
-         current_test_state_ = test_state;
+         test_state_ = test_state;
          }
 
       using lowest_layer_type = MockSocket;
       using executor_type = MockSocket;
 
    private:
-      std::shared_ptr<TestState> current_test_state_;
+      std::shared_ptr<TestState> test_state_;
    };
 
 static std::shared_ptr<TestState> setupTestHandshake(MockChannel& channel, MockSocket& socket)
    {
    auto s = std::make_shared<TestState>();
    channel.set_current_test_state(s);
-   socket.set_current_test_state(s);
+   socket.reset(s);
 
    // fake handshake initialization
    uint8_t buf[128];
@@ -158,11 +196,14 @@ static std::shared_ptr<TestState> setupTestHandshake(MockChannel& channel, MockS
    return s;
    }
 
-static std::shared_ptr<TestState> setupTestSyncRead(MockChannel& channel, MockSocket& socket)
+static std::shared_ptr<TestState> setupTestSyncRead(MockChannel& channel, MockSocket& socket, Test::Result &result)
    {
    auto s = std::make_shared<TestState>();
+   s->result = &result;
+   boost::asio::buffer_copy(s->socket_buf, boost::asio::buffer(TEST_DATA, TEST_DATA_SIZE));
+
    channel.set_current_test_state(s);
-   socket.set_current_test_state(s);
+   socket.reset(s);
 
    channel.received_data_fun = [s, &channel](const uint8_t buf[], std::size_t buf_size)
       {
@@ -176,14 +217,15 @@ static std::shared_ptr<TestState> setupTestSyncRead(MockChannel& channel, MockSo
    return s;
    }
 
-static std::shared_ptr<TestState> setupTestSyncWrite(MockChannel& channel, MockSocket& socket)
+static std::shared_ptr<TestState> setupTestSyncWrite(MockChannel& channel, MockSocket& socket, Test::Result &result)
    {
    auto s = std::make_shared<TestState>();
-   channel.set_current_test_state(s);
-   socket.set_current_test_state(s);
+   s->result = &result;
 
-   channel.send_data_fun = [s, &channel](const uint8_t buf[],
-                                         std::size_t buf_size)
+   channel.set_current_test_state(s);
+   socket.reset(s);
+
+   channel.send_data_fun = [s, &channel](const uint8_t buf[], std::size_t buf_size)
       {
       channel.tls_emit_data(buf, buf_size);
       };
@@ -251,9 +293,23 @@ class ASIO_Stream_Tests final : public Test
          return result;
          }
 
+      Test::Result test_async_read_some()
+         {
+         Test::Result result("asynchronous read");
+
+         MockSocket socket{};
+         Botan::Stream<MockSocket&, MockChannel> ssl{socket};
+
+         test_async_read_some_basic_case(result, ssl, socket);
+         // test_async_read_some_error(result, ssl, socket);
+         test_async_read_some_reads_data_in_chunks(result, ssl, socket);
+
+         return result;
+         }
+
       void test_read_some_basic_case(Test::Result& result, TestStream& ssl, MockSocket& socket)
          {
-         auto s = setupTestSyncRead(ssl.channel(), socket);
+         auto s = setupTestSyncRead(ssl.channel(), socket, result);
 
          char buf[128];
          boost::system::error_code ec;
@@ -265,7 +321,7 @@ class ASIO_Stream_Tests final : public Test
 
       void test_read_some_error(Test::Result& result, TestStream& ssl, MockSocket& socket)
          {
-         auto s = setupTestSyncRead(ssl.channel(), socket);
+         auto s = setupTestSyncRead(ssl.channel(), socket, result);
 
          socket.read_some_fun = [s, &socket](const boost::asio::mutable_buffer& buffers, boost::system::error_code& ec)
             {
@@ -274,7 +330,7 @@ class ASIO_Stream_Tests final : public Test
                {
                ec.assign(1, ec.category());
                }
-            return socket_buf_size;
+            return SOCKET_BUF_SIZE;
             };
 
          char buf[128];
@@ -286,31 +342,19 @@ class ASIO_Stream_Tests final : public Test
 
       void test_read_some_reads_data_in_chunks(Test::Result& result, TestStream& ssl, MockSocket& socket)
          {
-         auto s = setupTestSyncRead(ssl.channel(), socket);
+         auto s = setupTestSyncRead(ssl.channel(), socket, result);
 
          char buf[48];
          boost::system::error_code ec;
-         size_t total_bytes_read = 0;
 
          auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
-         total_bytes_read += bytes_read;
-         result.test_eq("stream consumes some data", total_bytes_read, sizeof(buf));
-         result.test_eq("data read from socket", s->socket_read_count, 3);
-         result.test_is_eq("first part of data is read correctly", memcmp(buf, TEST_DATA, bytes_read), 0);
+         s->check_has_read_test_data(buf, sizeof(buf), 3, 0, ec, bytes_read);
 
          bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
-         total_bytes_read += bytes_read;
-         result.test_eq("stream consumes some more data", total_bytes_read, 2 * sizeof(buf));
-         result.test_eq("no further data read from socket", s->socket_read_count, 3);
-         result.test_is_eq("second part of data is read correctly",
-                           memcmp(buf, TEST_DATA + sizeof(buf), bytes_read), 0);
+         s->check_has_read_test_data(buf, 2 * sizeof(buf), 3, sizeof(buf), ec, bytes_read);
 
          bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
-         total_bytes_read += bytes_read;
-         result.test_eq("stream consumes final data", total_bytes_read, socket_buf_size);
-         result.test_eq("still no further data read from socket", s->socket_read_count, 3);
-         result.test_is_eq("last part of data is read correctly",
-                           memcmp(buf, TEST_DATA + 2 * sizeof(buf), bytes_read), 0);
+         s->check_has_read_test_data(buf, SOCKET_BUF_SIZE, 3, 2 * sizeof(buf), ec, bytes_read);
          }
 
       Test::Result test_write_some()
@@ -328,10 +372,22 @@ class ASIO_Stream_Tests final : public Test
          return result;
          }
 
+      Test::Result test_async_write_some()
+         {
+         Test::Result result("asynchronous write_some");
+
+         MockSocket socket{};
+         Botan::Stream<MockSocket&, MockChannel> ssl{socket};
+
+         test_async_write_some_writes_data_in_chunks(result, ssl, socket);
+
+         return result;
+         }
+
       void test_write_some_basic_case(Test::Result& result, TestStream& ssl,
                                       MockSocket& socket)
          {
-         auto s = setupTestSyncWrite(ssl.channel(), socket);
+         auto s = setupTestSyncWrite(ssl.channel(), socket, result);
 
          char buf[128];
          boost::system::error_code ec;
@@ -339,28 +395,29 @@ class ASIO_Stream_Tests final : public Test
          ssl.write_some(buffer, ec);
 
          result.test_eq("some data is written", s->socket_write_count,
-                        ceil((float)buffer.size() / socket_buf_size));
+                        ceil((float)buffer.size() / SOCKET_BUF_SIZE));
          result.test_eq("channel calls send", s->channel_send_count, 1);
          }
 
       void test_write_some_big_data(Test::Result& result, TestStream& ssl,
                                     MockSocket& socket)
          {
-         auto s = setupTestSyncWrite(ssl.channel(), socket);
+         auto s = setupTestSyncWrite(ssl.channel(), socket, result);
 
          char buf[18 * 1024];
          boost::system::error_code ec;
          auto buffer = boost::asio::buffer(buf, sizeof(buf));
          ssl.write_some(buffer, ec);
 
-         result.test_eq("some data is written", s->socket_write_count, ceil((float)buffer.size() / socket_buf_size));
+         result.test_eq("big data is written", s->socket_write_count,
+                        ceil((float)buffer.size() / SOCKET_BUF_SIZE));
          result.test_eq("channel calls send", s->channel_send_count, 1);
          }
 
       void test_write_some_write_nothing(Test::Result& result, TestStream& ssl,
                                          MockSocket& socket)
          {
-         auto s = setupTestSyncWrite(ssl.channel(), socket);
+         auto s = setupTestSyncWrite(ssl.channel(), socket, result);
 
          char buf[128];
          boost::system::error_code ec;
@@ -373,60 +430,97 @@ class ASIO_Stream_Tests final : public Test
 
       void test_write_some_writes_data_in_chunks(Test::Result& result, TestStream& ssl, MockSocket& socket)
          {
-         auto s = setupTestSyncWrite(ssl.channel(), socket);
+         auto s = setupTestSyncWrite(ssl.channel(), socket, result);
 
          const std::size_t in_buf_size = 48;
          boost::system::error_code ec;
-         size_t total_bytes_written = 0;
 
          auto write_next = [&]
             {
-            const std::size_t write = std::min(in_buf_size, TEST_DATA_SIZE - total_bytes_written);
-            return ssl.write_some(boost::asio::buffer(TEST_DATA + total_bytes_written, write), ec);
+            const std::size_t write = std::min(in_buf_size, TEST_DATA_SIZE - s->bytes_written);
+            return ssl.write_some(boost::asio::buffer(TEST_DATA + s->bytes_written, write), ec);
             };
 
          auto bytes_written = write_next();
-         total_bytes_written += bytes_written;
-         result.test_eq("stream consumes some data", total_bytes_written, in_buf_size);
-         result.test_eq("data written to socket", s->socket_write_count, 1);
-         result.test_is_eq("first part of data is written correctly",
-                           memcmp(socket.socket_buf, TEST_DATA, bytes_written), 0);
+         s->check_has_written_test_data(in_buf_size, 1, 0, ec, bytes_written);
 
          bytes_written = write_next();
-         total_bytes_written += bytes_written;
-         result.test_eq("stream consumes some more data", total_bytes_written, 2 * in_buf_size);
-         result.test_eq("no further data written to socket", s->socket_write_count, 2);
-         result.test_is_eq("second part of data is written correctly",
-                           memcmp(socket.socket_buf, TEST_DATA + in_buf_size, bytes_written), 0);
+         s->check_has_written_test_data(2 * in_buf_size, 2, in_buf_size, ec, bytes_written);
 
          bytes_written = write_next();
-         total_bytes_written += bytes_written;
-         result.test_eq("stream consumes final data", total_bytes_written, TEST_DATA_SIZE);
-         result.test_eq("still no further data written to socket", s->socket_write_count, 3);
-         result.test_is_eq("last part of data is written correctly",
-                           memcmp(socket.socket_buf, TEST_DATA + 2 * in_buf_size, bytes_written), 0);
+         s->check_has_written_test_data(TEST_DATA_SIZE, 3, 2 * in_buf_size, ec, bytes_written);
          }
 
-      Test::Result test_async_read_some()
+      void test_async_write_some_writes_data_in_chunks(Test::Result& result, TestStream& ssl, MockSocket& socket)
          {
-         Test::Result result("asynchronous read");
+         auto s = setupTestSyncWrite(ssl.channel(), socket, result);
 
-         MockSocket socket{};
-         Botan::Stream<MockSocket&, MockChannel> ssl{socket};
-         auto s = setupTestSyncRead(ssl.channel(), socket);
+         const std::size_t in_buf_size = 48;
+         boost::system::error_code ec;
+
+         std::size_t write = std::min(in_buf_size, TEST_DATA_SIZE - s->bytes_written);
+         ssl.async_write_some(boost::asio::buffer(TEST_DATA + s->bytes_written, write),
+                              [&](const boost::system::error_code& ec, std::size_t bytes_written)
+            {
+            s->check_has_written_test_data(in_buf_size, 1, 0, ec, bytes_written);
+            });
+
+         write = std::min(in_buf_size, TEST_DATA_SIZE - s->bytes_written);
+         ssl.async_write_some(boost::asio::buffer(TEST_DATA + s->bytes_written, write),
+                              [&](const boost::system::error_code& ec, std::size_t bytes_written)
+            {
+            s->check_has_written_test_data(2 * in_buf_size, 2, in_buf_size, ec, bytes_written);
+            });
+
+         write = std::min(in_buf_size, TEST_DATA_SIZE - s->bytes_written);
+         ssl.async_write_some(boost::asio::buffer(TEST_DATA + s->bytes_written, write),
+                              [&](const boost::system::error_code& ec, std::size_t bytes_written)
+            {
+            s->check_has_written_test_data(TEST_DATA_SIZE, 3, 2 * in_buf_size, ec, bytes_written);
+            });
+         }
+
+      void test_async_read_some_basic_case(Test::Result& result, TestStream& ssl, MockSocket& socket)
+         {
+         auto s = setupTestSyncRead(ssl.channel(), socket, result);
 
          char buf[128];
          auto read_handler = [&](const boost::system::error_code& ec, std::size_t bytes_transferred)
-         {
+            {
             std::cout << "channel receive: " << s->channel_recv_count << std::endl;
             result.test_eq("some data is read", s->socket_read_count, 3);
             result.test_is_eq("correct data is read", memcmp(buf, TEST_DATA, sizeof(buf)), 0);
-         };
+            };
 
          boost::asio::async_read(ssl, boost::asio::buffer(buf, sizeof(buf)), read_handler);
-
-         return result;
          }
+
+      void test_async_read_some_reads_data_in_chunks(Test::Result& result, TestStream& ssl, MockSocket& socket)
+         {
+         auto s = setupTestSyncRead(ssl.channel(), socket, result);
+
+         char buf[48];
+         boost::system::error_code ec;
+
+         ssl.async_read_some(boost::asio::buffer(buf, sizeof(buf)),
+                             [&](const boost::system::error_code& ec, std::size_t bytes_read)
+            {
+            s->check_has_read_test_data(buf, sizeof(buf), 3, 0, ec, bytes_read);
+            });
+
+         ssl.async_read_some(boost::asio::buffer(buf, sizeof(buf)),
+                             [&](const boost::system::error_code& ec, std::size_t bytes_read)
+            {
+            s->check_has_read_test_data(buf, 2 * sizeof(buf), 3, sizeof(buf), ec, bytes_read);
+            });
+
+         ssl.async_read_some(boost::asio::buffer(buf, sizeof(buf)),
+                             [&](const boost::system::error_code& ec, std::size_t bytes_read)
+            {
+            s->check_has_read_test_data(buf, SOCKET_BUF_SIZE, 3, 2 * sizeof(buf), ec, bytes_read);
+            });
+         }
+
 
    public:
       std::vector<Test::Result> run() override
@@ -435,8 +529,9 @@ class ASIO_Stream_Tests final : public Test
 
          results.push_back(test_handshake());
          results.push_back(test_read_some());
-         results.push_back(test_write_some());
          results.push_back(test_async_read_some());
+         results.push_back(test_write_some());
+         results.push_back(test_async_write_some());
 
          return results;
          }
