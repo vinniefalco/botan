@@ -62,12 +62,6 @@ struct AsyncReadOperation
 
          if(core_.hasReceivedData())
          {
-            if(first_call)
-            {
-               // don't call the handler directly, similar to io_context.post
-               nextLayer_.async_read_some(boost::asio::buffer(core_.input_buffer_, 0), std::move(*this));
-               return;
-            }
             decodedBytes = core_.copyReceivedData(buffers_);
             ec = boost::system::error_code{};
          }
