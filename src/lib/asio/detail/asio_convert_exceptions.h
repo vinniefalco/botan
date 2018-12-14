@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_CONVERT_EXCEPTIONS_H_
+#define BOTAN_ASIO_CONVERT_EXCEPTIONS_H_
+
 #include <botan/asio_error.h>
 #include <botan/tls_exceptn.h>
 
@@ -113,3 +115,5 @@ inline boost::system::error_code convertException()
    }
 }
 }
+
+#endif

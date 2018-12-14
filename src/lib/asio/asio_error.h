@@ -1,8 +1,11 @@
-#pragma once
+#ifndef BOTAN_ASIO_ERROR_H_
+#define BOTAN_ASIO_ERROR_H_
+
 #include <boost/system/system_error.hpp>
 #include <botan/tls_alert.h>
 
 namespace Botan {
+
 using error_code = boost::system::error_code;
 using error_category = boost::system::error_category;
 
@@ -147,3 +150,5 @@ template<> struct is_error_code_enum<Botan::error>
    };
 }
 }
+
+#endif

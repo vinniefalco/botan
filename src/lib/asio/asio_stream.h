@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_STREAM_H_
+#define BOTAN_ASIO_STREAM_H_
+
 #include <boost/asio.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <botan/auto_rng.h>
@@ -316,3 +318,5 @@ using ClientStream = Stream<StreamLayer, Botan::TLS::Client>;
 template <class StreamLayer>
 using ServerStream = Stream<StreamLayer, Botan::TLS::Server>;
 }  // namespace botan
+
+#endif

@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_ASYNC_READ_OP_H_
+#define BOTAN_ASIO_ASYNC_READ_OP_H_
+
 #include <botan/asio_convert_exceptions.h>
 #include <botan/asio_stream_core.h>
 #include <botan/tls_channel.h>
@@ -78,3 +80,5 @@ struct AsyncReadOperation
    };
 }  // namespace detail
 }  // namespace Botan
+
+#endif

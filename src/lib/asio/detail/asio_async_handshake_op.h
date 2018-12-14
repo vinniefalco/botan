@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_ASYNC_HANDSHAKE_OP_H_
+#define BOTAN_ASIO_ASYNC_HANDSHAKE_OP_H_
+
 #include <botan/asio_async_write_op.h>
 #include <botan/asio_convert_exceptions.h>
 #include <botan/asio_stream_core.h>
@@ -84,3 +86,5 @@ struct AsyncHandshakeOperation
    };
 }  // namespace detail
 }  // namespace Botan
+
+#endif

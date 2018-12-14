@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_STREAM_CORE_H_
+#define BOTAN_ASIO_STREAM_CORE_H_
+
 #include <botan/tls_callbacks.h>
 #include <boost/asio/buffer.hpp>
 #include <mutex>
@@ -88,3 +90,5 @@ struct StreamCore : public Botan::TLS::Callbacks
    };
 }  // namespace detail
 }  // namespace Botan
+
+#endif

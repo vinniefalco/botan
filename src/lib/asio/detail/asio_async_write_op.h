@@ -1,4 +1,6 @@
-#pragma once
+#ifndef BOTAN_ASIO_ASYNC_WRITE_OP_H_
+#define BOTAN_ASIO_ASYNC_WRITE_OP_H_
+
 #include <botan/asio_stream_core.h>
 #include <boost/asio.hpp>
 #include <boost/asio/buffer.hpp>
@@ -36,3 +38,5 @@ struct AsyncWriteOperation
    };
 }  // namespace detail
 }  // namespace Botan
+
+#endif
