@@ -11,11 +11,11 @@
 #include <thread>
 #include <type_traits>
 
-#include "botan/asio_async_handshake_op.h"
-#include "botan/asio_async_read_op.h"
-#include "botan/asio_async_write_op.h"
-#include "botan/asio_convert_exceptions.h"
-#include "botan/asio_stream_core.h"
+#include "botan/internal/asio_async_handshake_op.h"
+#include "botan/internal/asio_async_read_op.h"
+#include "botan/internal/asio_async_write_op.h"
+#include "botan/internal/asio_convert_exceptions.h"
+#include "botan/internal/asio_stream_core.h"
 
 namespace Botan {
 

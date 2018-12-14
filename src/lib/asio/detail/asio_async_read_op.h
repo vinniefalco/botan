@@ -1,8 +1,8 @@
 #ifndef BOTAN_ASIO_ASYNC_READ_OP_H_
 #define BOTAN_ASIO_ASYNC_READ_OP_H_
 
-#include <botan/asio_convert_exceptions.h>
-#include <botan/asio_stream_core.h>
+#include <botan/internal/asio_convert_exceptions.h>
+#include <botan/internal/asio_stream_core.h>
 #include <botan/tls_channel.h>
 #include <boost/asio.hpp>
 #include <boost/asio/buffer.hpp>
