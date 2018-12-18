@@ -4,8 +4,8 @@
 
 #if defined(BOTAN_HAS_TLS)
 
-   #include <botan/asio_stream.h>
-   #include <botan/tls_callbacks.h>
+#include <botan/asio_stream.h>
+#include <botan/tls_callbacks.h>
 
 #endif
 
@@ -76,7 +76,7 @@ struct TestState
 class MockChannel
    {
    public:
-      MockChannel(Botan::detail::StreamCore& core) : core_(core) {}
+      MockChannel(Botan::StreamCore& core) : core_(core) {}
 
    public:
       // mockable channel functions
@@ -124,7 +124,7 @@ class MockChannel
          }
 
    protected:
-      Botan::detail::StreamCore& core_;
+      Botan::StreamCore& core_;
       std::shared_ptr<TestState> current_test_state_;
    };
 
@@ -252,7 +252,7 @@ class StreamBase<Botan_Tests::MockChannel>
       StreamBase& operator=(const StreamBase&) = delete;
 
    protected:
-      detail::StreamCore core_;
+      StreamCore core_;
       Botan::AutoSeeded_RNG rng_;
       Botan_Tests::MockChannel channel_;
    };

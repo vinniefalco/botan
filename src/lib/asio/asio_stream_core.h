@@ -2,12 +2,11 @@
 #define BOTAN_ASIO_STREAM_CORE_H_
 
 #include <botan/tls_callbacks.h>
-#include <boost/asio/buffer.hpp>
+#include <botan/asio_includes.h>
 #include <mutex>
 #include <vector>
 
 namespace Botan {
-namespace detail {
 /**
  * Contains the buffers for reading/sending, and the needed botan callbacks
  */
@@ -33,7 +32,7 @@ struct StreamCore : public Botan::TLS::Callbacks
          send_buffer_.dynamicBuffer.commit(copySize);
          }
 
-      void tls_record_received(uint64_t seq_no, const uint8_t data[], size_t size) override
+      void tls_record_received(uint64_t, const uint8_t data[], size_t size) override
          {
          auto buffer = receive_buffer_.dynamicBuffer.prepare(size);
          auto copySize = boost::asio::buffer_copy(buffer, boost::asio::buffer(data, size));
@@ -48,7 +47,7 @@ struct StreamCore : public Botan::TLS::Callbacks
             }
          }
 
-      bool tls_session_established(const Botan::TLS::Session& session) override
+      bool tls_session_established(const Botan::TLS::Session&) override
          {
          return true;
          }
@@ -88,7 +87,6 @@ struct StreamCore : public Botan::TLS::Callbacks
       Buffer receive_buffer_;
       Buffer send_buffer_;
    };
-}  // namespace detail
 }  // namespace Botan
 
 #endif

@@ -1,19 +1,16 @@
 #ifndef BOTAN_ASIO_ASYNC_HANDSHAKE_OP_H_
 #define BOTAN_ASIO_ASYNC_HANDSHAKE_OP_H_
 
-#include <botan/internal/asio_async_write_op.h>
-#include <botan/internal/asio_convert_exceptions.h>
-#include <botan/internal/asio_stream_core.h>
-#include <botan/tls_channel.h>
-#include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
+#include <botan/asio_async_write_op.h>
+#include <botan/asio_convert_exceptions.h>
+#include <botan/asio_stream_core.h>
+#include <botan/asio_includes.h>
 
 namespace Botan {
-namespace detail {
-template <typename StreamLayer, typename Handler>
+template <class Channel, class StreamLayer, class Handler>
 struct AsyncHandshakeOperation
    {
-      AsyncHandshakeOperation(Botan::TLS::Channel& channel, StreamCore& core,
+      AsyncHandshakeOperation(Channel& channel, StreamCore& core,
                               StreamLayer& nextLayer, Handler&& handler)
          : channel_(channel),
            core_(core),
@@ -45,7 +42,7 @@ struct AsyncHandshakeOperation
                }
             catch(...)
                {
-               ec = detail::convertException();
+               ec = convertException();
                handler_(ec);
                return;
                }
@@ -54,7 +51,7 @@ struct AsyncHandshakeOperation
          // send tls packets
          if(core_.hasDataToSend())
             {
-            AsyncWriteOperation<AsyncHandshakeOperation<StreamLayer, Handler>>
+            AsyncWriteOperation<AsyncHandshakeOperation<Channel, StreamLayer, Handler>>
                   op{core_, std::move(*this), 0};
             boost::asio::async_write(nextLayer_, core_.sendBuffer(),
                                      std::move(op));
@@ -79,12 +76,11 @@ struct AsyncHandshakeOperation
          }
 
    private:
-      Botan::TLS::Channel& channel_;
+      Channel& channel_;
       StreamCore& core_;
       StreamLayer& nextLayer_;
       Handler handler_;
    };
-}  // namespace detail
 }  // namespace Botan
 
 #endif

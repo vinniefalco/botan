@@ -1,21 +1,20 @@
 #ifndef BOTAN_ASIO_STREAM_H_
 #define BOTAN_ASIO_STREAM_H_
 
-#include <boost/asio.hpp>
-#include <boost/asio/ip/tcp.hpp>
 #include <botan/auto_rng.h>
-#include <botan/tls_channel.h>
 #include <botan/tls_client.h>
 #include <botan/tls_server.h>
+
+#include <botan/asio_async_handshake_op.h>
+#include <botan/asio_async_read_op.h>
+#include <botan/asio_async_write_op.h>
+#include <botan/asio_convert_exceptions.h>
+#include <botan/asio_stream_core.h>
+#include <botan/asio_includes.h>
+
 #include <memory>
 #include <thread>
 #include <type_traits>
-
-#include "botan/internal/asio_async_handshake_op.h"
-#include "botan/internal/asio_async_read_op.h"
-#include "botan/internal/asio_async_write_op.h"
-#include "botan/internal/asio_convert_exceptions.h"
-#include "botan/internal/asio_stream_core.h"
 
 namespace Botan {
 
@@ -46,7 +45,7 @@ class StreamBase<Botan::TLS::Client>
       StreamBase& operator=(const StreamBase&) = delete;
 
    protected:
-      detail::StreamCore    core_;
+      Botan::StreamCore    core_;
       Botan::AutoSeeded_RNG rng_;
       Botan::TLS::Client    channel_;
    };
@@ -66,7 +65,7 @@ class StreamBase<Botan::TLS::Server>
       StreamBase& operator=(const StreamBase&) = delete;
 
    protected:
-      detail::StreamCore    core_;
+      Botan::StreamCore    core_;
       Botan::AutoSeeded_RNG rng_;
       Botan::TLS::Server    channel_;
    };
@@ -128,7 +127,7 @@ class Stream : public StreamBase<Channel>
                }
             catch(...)
                {
-               ec = detail::convertException();
+               ec = Botan::convertException();
                return;
                }
             }
@@ -165,7 +164,7 @@ class Stream : public StreamBase<Channel>
             }
          catch(...)
             {
-            ec = detail::convertException();
+            ec = Botan::convertException();
             return;
             }
          writePendingTlsData(ec);
@@ -197,7 +196,7 @@ class Stream : public StreamBase<Channel>
                }
             catch(...)
                {
-               ec = detail::convertException();
+               ec = Botan::convertException();
                return 0;
                }
             }
@@ -228,7 +227,7 @@ class Stream : public StreamBase<Channel>
             }
          catch(...)
             {
-            ec = detail::convertException();
+            ec = Botan::convertException();
             return 0;
             }
 
@@ -253,7 +252,7 @@ class Stream : public StreamBase<Channel>
          catch(...)
             {
             // TODO: don't call directly
-            handler(detail::convertException(), 0);
+            handler(Botan::convertException(), 0);
             return;
             }
 
@@ -286,26 +285,26 @@ class Stream : public StreamBase<Channel>
          }
 
       template <typename Handler>
-      detail::AsyncHandshakeOperation<StreamLayer, Handler>
+      Botan::AsyncHandshakeOperation<Channel, StreamLayer, Handler>
       create_async_handshake_op(Handler&& handler)
          {
-         return detail::AsyncHandshakeOperation<StreamLayer, Handler>(
+         return Botan::AsyncHandshakeOperation<Channel, StreamLayer, Handler>(
                    channel(), this->core_, nextLayer_, std::forward<Handler>(handler));
          }
 
       template <typename Handler, typename MutableBufferSequence>
-      detail::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>
+      Botan::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>
       create_async_read_op(Handler&& handler, const MutableBufferSequence& buffers)
          {
-         return detail::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>(
+         return Botan::AsyncReadOperation<Channel, StreamLayer, Handler, MutableBufferSequence>(
                    channel(), this->core_, nextLayer_, std::forward<Handler>(handler), buffers);
          }
 
       template <typename Handler>
-      detail::AsyncWriteOperation<Handler>
+      Botan::AsyncWriteOperation<Handler>
       create_async_write_op(Handler&& handler, std::size_t plainBytesTransferred)
          {
-         return detail::AsyncWriteOperation<Handler>(
+         return Botan::AsyncWriteOperation<Handler>(
                    this->core_, std::forward<Handler>(handler), plainBytesTransferred);
          }
 

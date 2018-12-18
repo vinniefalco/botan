@@ -5,7 +5,6 @@
 #include <botan/tls_exceptn.h>
 
 namespace Botan {
-namespace detail {
 inline boost::system::error_code convertException()
    {
    try
@@ -113,7 +112,6 @@ inline boost::system::error_code convertException()
       return make_error_code(Botan::error::unknown);
       }
    }
-}
 }
 
 #endif

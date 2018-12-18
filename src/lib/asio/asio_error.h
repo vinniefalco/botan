@@ -2,6 +2,7 @@
 #define BOTAN_ASIO_ERROR_H_
 
 #include <boost/system/system_error.hpp>
+
 #include <botan/tls_alert.h>
 
 namespace Botan {

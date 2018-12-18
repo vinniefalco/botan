@@ -1,14 +1,11 @@
 #ifndef BOTAN_ASIO_ASYNC_READ_OP_H_
 #define BOTAN_ASIO_ASYNC_READ_OP_H_
 
-#include <botan/internal/asio_convert_exceptions.h>
-#include <botan/internal/asio_stream_core.h>
-#include <botan/tls_channel.h>
-#include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
+#include <botan/asio_convert_exceptions.h>
+#include <botan/asio_stream_core.h>
+#include <botan/asio_includes.h>
 
 namespace Botan {
-namespace detail {
 
 template <class Channel, class StreamLayer, class Handler, class MutableBufferSequence>
 struct AsyncReadOperation
@@ -49,7 +46,7 @@ struct AsyncReadOperation
             }
             catch(...)
             {
-               ec = detail::convertException();
+               ec = convertException();
                handler_(ec, 0);
                return;
             }
@@ -78,7 +75,6 @@ struct AsyncReadOperation
       Handler handler_;
       MutableBufferSequence buffers_;
    };
-}  // namespace detail
 }  // namespace Botan
 
 #endif

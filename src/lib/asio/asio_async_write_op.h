@@ -1,12 +1,10 @@
 #ifndef BOTAN_ASIO_ASYNC_WRITE_OP_H_
 #define BOTAN_ASIO_ASYNC_WRITE_OP_H_
 
-#include <botan/internal/asio_stream_core.h>
-#include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
+#include <botan/asio_stream_core.h>
+#include <botan/asio_includes.h>
 
 namespace Botan {
-namespace detail {
 
 template <typename Handler>
 struct AsyncWriteOperation
@@ -36,7 +34,6 @@ struct AsyncWriteOperation
    Handler handler_;
    std::size_t plainBytesTransferred_;
    };
-}  // namespace detail
 }  // namespace Botan
 
 #endif
