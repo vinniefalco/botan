@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#if defined(BOTAN_HAS_TLS)
+#if defined(BOTAN_HAS_TLS) && defined(BOTAN_HAS_BOOST_ASIO)
 
 #include <botan/asio_stream.h>
 #include <botan/tls_callbacks.h>
@@ -11,7 +11,7 @@
 
 namespace Botan_Tests {
 
-#if defined(BOTAN_HAS_TLS)
+#if defined(BOTAN_HAS_TLS) && defined(BOTAN_HAS_BOOST_ASIO)
 
 using namespace std::placeholders;
 
