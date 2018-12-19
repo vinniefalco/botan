@@ -47,6 +47,10 @@ struct StreamCore : public Botan::TLS::Callbacks
             }
          }
 
+       std::chrono::milliseconds tls_verify_cert_chain_ocsp_timeout() const override{
+          return std::chrono::milliseconds(1000);
+       }
+
       bool tls_session_established(const Botan::TLS::Session&) override
          {
          return true;
