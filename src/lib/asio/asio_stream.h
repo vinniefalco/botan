@@ -98,38 +98,33 @@ class Stream : public StreamBase<Channel>
 
       const Channel& channel() const { return this->channel_; }
 
+      void handshake(boost::system::error_code& ec)
+         {
+         try
+            {
+            handshake();
+            }
+         catch(...)
+            {
+            ec = Botan::convertException();
+            return;
+            }
+         }
+
       void handshake()
          {
          boost::system::error_code ec;
-         handshake(ec);
-         boost::asio::detail::throw_error(ec, "handshake");
-         }
-
-      void handshake(boost::system::error_code& ec)
-         {
          while(!channel().is_active())
             {
-            try
-               {
-               writePendingTlsData(ec);
-               if(ec)
-                  {
-                  return;
-                  }
-               auto read_buffer =
-                  boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
-               if(ec)
-                  {
-                  return;
-                  }
-               channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-               writePendingTlsData(ec);
-               }
-            catch(...)
-               {
-               ec = Botan::convertException();
-               return;
-               }
+            writePendingTlsData();
+
+            auto read_buffer =
+               boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
+            boost::asio::detail::throw_error(ec, "handshake");
+
+            channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
+
+            writePendingTlsData();
             }
          }
 
@@ -149,89 +144,77 @@ class Stream : public StreamBase<Channel>
          return init.result.get();
          }
 
-      void shutdown()
-         {
-         boost::system::error_code ec;
-         shutdown(ec);
-         boost::asio::detail::throw_error(ec, "shutdown");
-         }
-
       void shutdown(boost::system::error_code& ec)
          {
          try
             {
-            channel().close();
+            shutdown();
             }
          catch(...)
             {
             ec = Botan::convertException();
             return;
             }
-         writePendingTlsData(ec);
          }
 
-      template <typename MutableBufferSequence>
-      std::size_t read_some(const MutableBufferSequence& buffers)
+      void shutdown()
          {
-         boost::system::error_code ec;
-         std::size_t               n = read_some(buffers, ec);
-         boost::asio::detail::throw_error(ec, "read_some");
-         return n;
+         channel().close();
+         writePendingTlsData();
          }
 
       template <typename MutableBufferSequence>
       std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec)
          {
-         while(!this->core_.hasReceivedData())
-            {
-            auto read_buffer =
-               boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
-            if(ec)
-               {
-               return 0;
-               }
-            try
-               {
-               channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-               }
-            catch(...)
-               {
-               ec = Botan::convertException();
-               return 0;
-               }
-            }
-         auto copied = this->core_.copyReceivedData(buffers);
-         ec          = boost::system::error_code();  // TODO: is this needed, could ec be set here?
-         return copied;
-         }
-
-      template <typename ConstBufferSequence>
-      std::size_t write_some(const ConstBufferSequence& buffers)
-         {
-         boost::system::error_code ec;
-         std::size_t               n = write_some(buffers, ec);
-         boost::asio::detail::throw_error(ec, "write_some");
-         return n;
-         }
-
-      template <typename ConstBufferSequence>
-      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
-         {
-         boost::asio::const_buffer buffer =
-            boost::asio::detail::buffer_sequence_adapter<
-            boost::asio::const_buffer, ConstBufferSequence>::first(buffers);
-
          try
             {
-            channel().send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
+            return read_some(buffers);
             }
          catch(...)
             {
             ec = Botan::convertException();
             return 0;
             }
+         }
 
-         writePendingTlsData(ec);
+      template <typename MutableBufferSequence>
+      std::size_t read_some(const MutableBufferSequence& buffers)
+         {
+         boost::system::error_code ec;
+         while(!this->core_.hasReceivedData())
+            {
+            auto read_buffer =
+               boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
+            boost::asio::detail::throw_error(ec, "read_some");
+
+            channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
+            }
+         return this->core_.copyReceivedData(buffers);
+         }
+
+      template <typename ConstBufferSequence>
+      std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec)
+         {
+         try
+            {
+            return write_some(buffers);
+            }
+         catch(...)
+            {
+            ec = Botan::convertException();
+            return 0;
+            }
+         }
+
+      template <typename ConstBufferSequence>
+      std::size_t write_some(const ConstBufferSequence& buffers)
+         {
+         boost::asio::const_buffer buffer =
+            boost::asio::detail::buffer_sequence_adapter<
+            boost::asio::const_buffer, ConstBufferSequence>::first(buffers);
+
+         channel().send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
+         writePendingTlsData();
          return buffer.size();
          }
 
@@ -277,9 +260,12 @@ class Stream : public StreamBase<Channel>
          }
 
    protected:
-      size_t writePendingTlsData(boost::system::error_code& ec)
+      size_t writePendingTlsData()
          {
+         boost::system::error_code ec;
          auto writtenBytes = boost::asio::write(nextLayer_, this->core_.sendBuffer(), ec);
+         boost::asio::detail::throw_error(ec, "writePendingTlsData");
+
          this->core_.consumeSendBuffer(writtenBytes);
          return writtenBytes;
          }
