@@ -1,14 +1,11 @@
 #ifndef BOTAN_ASIO_STREAM_H_
 #define BOTAN_ASIO_STREAM_H_
 
-#include <botan/auto_rng.h>
-#include <botan/tls_client.h>
-#include <botan/tls_server.h>
-
 #include <botan/asio_async_handshake_op.h>
 #include <botan/asio_async_read_op.h>
 #include <botan/asio_async_write_op.h>
 #include <botan/asio_convert_exceptions.h>
+#include <botan/asio_stream_base.h>
 #include <botan/asio_stream_core.h>
 #include <botan/asio_includes.h>
 
@@ -18,58 +15,9 @@
 
 namespace Botan {
 
-template <class Channel>
-class StreamBase
-   {
-   };
-
-template <>
-class StreamBase<Botan::TLS::Client>
-   {
-   public:
-      StreamBase(Botan::TLS::Session_Manager& sessionManager,
-                 Botan::Credentials_Manager& credentialsManager,
-                 const Botan::TLS::Policy& policy = Botan::TLS::Strict_Policy{},
-                 const Botan::TLS::Server_Information& serverInfo =
-                    Botan::TLS::Server_Information{})
-         : channel_(core_,
-                    sessionManager,
-                    credentialsManager,
-                    policy,
-                    rng_,
-                    serverInfo)
-         {
-         }
-
-      StreamBase(const StreamBase&) = delete;
-      StreamBase& operator=(const StreamBase&) = delete;
-
-   protected:
-      Botan::StreamCore    core_;
-      Botan::AutoSeeded_RNG rng_;
-      Botan::TLS::Client    channel_;
-   };
-
-template <>
-class StreamBase<Botan::TLS::Server>
-   {
-   public:
-      StreamBase(Botan::TLS::Session_Manager& sessionManager,
-                 Botan::Credentials_Manager& credentialsManager,
-                 const Botan::TLS::Policy& policy = Botan::TLS::Strict_Policy{})
-         : channel_(core_, sessionManager, credentialsManager, policy, rng_)
-         {
-         }
-
-      StreamBase(const StreamBase&) = delete;
-      StreamBase& operator=(const StreamBase&) = delete;
-
-   protected:
-      Botan::StreamCore    core_;
-      Botan::AutoSeeded_RNG rng_;
-      Botan::TLS::Server    channel_;
-   };
-
+/**
+* boost::asio compatible SSL/TLS stream based on TLS::Client or TLS::Server.
+*/
 template <class StreamLayer, class Channel>
 class Stream : public StreamBase<Channel>
    {
@@ -297,11 +245,6 @@ class Stream : public StreamBase<Channel>
       StreamLayer nextLayer_;
    };
 
-template <class StreamLayer>
-using ClientStream = Stream<StreamLayer, Botan::TLS::Client>;
-
-template <class StreamLayer>
-using ServerStream = Stream<StreamLayer, Botan::TLS::Server>;
 }  // namespace botan
 
 #endif
