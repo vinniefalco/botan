@@ -537,7 +537,8 @@ class ASIO_Stream_Tests final : public Test
          }
    };
 
+BOTAN_REGISTER_TEST("asio_stream", ASIO_Stream_Tests);
+
 #endif
 
-BOTAN_REGISTER_TEST("asio_stream", ASIO_Stream_Tests);
 }  // namespace Botan_Tests
