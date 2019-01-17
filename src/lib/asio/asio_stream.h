@@ -129,14 +129,18 @@ class Stream : public StreamBase<Channel>
       std::size_t read_some(const MutableBufferSequence& buffers)
          {
          boost::system::error_code ec;
-         while(!this->core_.hasReceivedData())
+         if(this->core_.hasReceivedData())
             {
-            auto read_buffer =
-               boost::asio::buffer(this->core_.input_buffer_, nextLayer_.read_some(this->core_.input_buffer_, ec));
-            boost::asio::detail::throw_error(ec, "read_some");
-
-            channel().received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
+            return this->core_.copyReceivedData(buffers);
             }
+
+         auto read_buffer = boost::asio::buffer(
+                               this->core_.input_buffer_,
+                               nextLayer_.read_some(this->core_.input_buffer_, ec));
+         boost::asio::detail::throw_error(ec, "read_some");
+
+         channel().received_data(static_cast<const uint8_t*>(read_buffer.data()),
+                                 read_buffer.size());
          return this->core_.copyReceivedData(buffers);
          }
 
