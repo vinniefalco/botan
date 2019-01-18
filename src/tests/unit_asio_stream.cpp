@@ -313,7 +313,7 @@ class ASIO_Stream_Tests final : public Test
 
          char buf[128];
          boost::system::error_code ec;
-         auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         auto bytes_read = boost::asio::read(ssl, boost::asio::buffer(buf, sizeof(buf)), ec);
 
          result.test_eq("some data is read", s->socket_read_count, 3);
          result.test_is_eq("correct data is read", memcmp(buf, TEST_DATA, sizeof(buf)), 0);
@@ -335,7 +335,7 @@ class ASIO_Stream_Tests final : public Test
 
          char buf[128];
          boost::system::error_code ec;
-         auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         auto bytes_read = boost::asio::read(ssl, boost::asio::buffer(buf, sizeof(buf)), ec);
 
          result.test_eq("stream stops reading after error", s->socket_read_count, 2);
          }
@@ -344,16 +344,28 @@ class ASIO_Stream_Tests final : public Test
          {
          auto s = setupTestSyncRead(ssl.channel(), socket, result);
 
+         socket.read_some_fun = [s, &socket](const boost::asio::mutable_buffer& buffers, boost::system::error_code& ec)
+            {
+            s->socket_read_count += 1;
+            if(s->socket_read_count == 3)
+               {
+               ec.assign(boost::asio::error::eof, ec.category());
+               const std::size_t remaining_bytes = 32;
+               return remaining_bytes;
+               }
+            return SOCKET_BUF_SIZE;
+            };
+
          char buf[48];
          boost::system::error_code ec;
 
-         auto bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         auto bytes_read = boost::asio::read(ssl, boost::asio::buffer(buf, sizeof(buf)), ec);
          s->check_has_read_test_data(buf, sizeof(buf), 3, 0, ec, bytes_read);
 
-         bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         bytes_read = boost::asio::read(ssl, boost::asio::buffer(buf, sizeof(buf)), ec);
          s->check_has_read_test_data(buf, 2 * sizeof(buf), 3, sizeof(buf), ec, bytes_read);
 
-         bytes_read = ssl.read_some(boost::asio::buffer(buf, sizeof(buf)), ec);
+         bytes_read = boost::asio::read(ssl, boost::asio::buffer(buf, sizeof(buf)), ec);
          s->check_has_read_test_data(buf, SOCKET_BUF_SIZE, 3, 2 * sizeof(buf), ec, bytes_read);
          }
 
