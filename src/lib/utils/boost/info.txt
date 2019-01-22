@@ -6,5 +6,5 @@ BOOST_ASIO -> 20131228
 load_on vendor
 
 <libs>
-all -> boost_system,boost_filesystem
+all -> boost_system,boost_filesystem,pthread
 </libs>
